@@ -1,0 +1,561 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            },
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "has:attachment filename:pdf resume"
+        },
+        "options": {
+          "dataPropertyAttachmentsPrefixName": "cv",
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        432
+      ],
+      "id": "f448ccac-0841-4938-88fe-7c0cea0c6e3c",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7envEyFRr9rAcFSv",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "cv0",
+        "name": "=={{ $json.from.value[0].name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1Jrv8FeV44Bcl-WWJC967NRmeb-TXYEF_",
+          "mode": "list",
+          "cachedResultName": "Job Resumes",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1Jrv8FeV44Bcl-WWJC967NRmeb-TXYEF_"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        368,
+        304
+      ],
+      "id": "3ba4bf7f-b1de-4d62-aade-52f98a87521c",
+      "name": "Upload file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KYRuPTzJCGShaMAU",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        496,
+        176
+      ],
+      "id": "3c380a28-4197-4940-af5e-c4b46e5cf94e",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "KYRuPTzJCGShaMAU",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        656,
+        80
+      ],
+      "id": "9a88f785-8898-4508-b9af-55a8d40cc8af",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        864,
+        272
+      ],
+      "id": "b08c65d6-5edd-4aad-848c-55198b546e10",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "EdaXTfQ0dlvIZtDX",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "=={{ $json.text }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"name\": {\n      \"type\": \"string\"\n    },\n    \"email\": {\n      \"type\": \"string\",\n      \"format\": \"email\"\n    },\n    \"phone_number\": {\n      \"type\": \"string\",\n      \"pattern\": \"^(\\\\+\\\\d{1,3}[- ]?)?\\\\d{10}$\"\n    }\n  },\n  \"required\": [\"name\", \"email\", \"phone_number\"]\n}\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        -16
+      ],
+      "id": "1a8f594b-d3a6-4d9d-9839-0fb778ca8960",
+      "name": "Information Extractor"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "==Resume: {{ $('Extract from File').item.json.text }}",
+        "options": {
+          "systemMessage": "** Purpose **\nYou are a CV Evaluation and Summarization Agent. Your task is to extract key information from a CV and output it in a clean, structured format. You must also evaluate how well the candidate fits a specified job role and assign a relevance score (1-10), followed by a short justification.\n\n** How It Works **\nWhen provided with a CV and job description, follow this process:\n1. Extract & Summarize Information from the CV\n- Educational Qualifications\nInclude degrees, institutions, and graduation years.\n- Job History\nList job titles, company names, employment dates, and 1 short sentence summarizing key responsibilities or achievements.\n- Skill Set\nList technical, soft, or role-specific skills - separated by commas.\n2. Evaluate the Candidate for the Job Role\n- Compare the candidate's qualifications and experience with the job requirements.\n- Assign a score from 1-10 based on relevance:\n1-3: Weak match\n4-6: Moderate match\n7-8: Strong match\n9-10: Excellent match\n- Provide a brief justification for the score. Mention strengths and gaps directly related to the role - no assumptions or interpretations.\n\n** Output Format (follow EXACTLY - the Code node depends on it) **\n**Educational Qualifications:**\n<content>\n**Job History:**\n<content>\n**Skill Set:**\n<content>\n**Evaluation**\n**Relevance Score:** X/10\n**Justification:** <content>\n\n** Job Role Being Hired For **\nJob Title: Junior AI Automation Engineer\nRequired: Bachelor's degree in CS, SE, IT or a related field.\nRequired skills: Python, REST APIs, JSON, prompt engineering, n8n or any low-code automation platform, Git.\nNice to have: LangChain, vector databases, SQL, cloud deployment (AWS/GCP).\nExperience: 0-2 years. Internships and personal projects count.\nScore the candidate ONLY against the requirements listed above."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1072,
+        80
+      ],
+      "id": "940734de-f4f8-417d-8778-592fa689036f",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9c2cd386-a05f-42e4-9d4e-9e312418c191",
+              "name": "content",
+              "value": "= ={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1376,
+        160
+      ],
+      "id": "95c1b5ec-6015-4dbb-8527-e7c3f42e27c6",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Gm1vL5eU8_32f1GZ-8XukWFCFEWJnWIQThsXGJxIzMM",
+          "mode": "list",
+          "cachedResultName": "Resume Analyzer",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Gm1vL5eU8_32f1GZ-8XukWFCFEWJnWIQThsXGJxIzMM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Gm1vL5eU8_32f1GZ-8XukWFCFEWJnWIQThsXGJxIzMM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "=={{ $('Information Extractor').item.json.output.name }}",
+            "Number": "=={{ $('Information Extractor').item.json.output.phone_number }}",
+            "Email": "=={{ $('Information Extractor').item.json.output.email }}",
+            "Qualifications": "=={{ $json.educationalQualifications }}",
+            "Skill Set": "=={{ $json.skillSet }}",
+            "Job History": "=={{ $json.jobHistory }}",
+            "Score": "=={{ $json.score }}",
+            "Justification": "=={{ $json.justification }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Number",
+              "displayName": "Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Skill Set",
+              "displayName": "Skill Set",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Qualifications",
+              "displayName": "Qualifications",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job History",
+              "displayName": "Job History",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Justification",
+              "displayName": "Justification",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1712,
+        384
+      ],
+      "id": "7b0133b4-5f0c-40a0-82ca-c2273c585357",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fSUXDpLiysP0pIqh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "bc03fda5-fb98-4c81-8149-edae3ee0f948",
+              "leftValue": "={{ $('Code').item.json.score }}",
+              "rightValue": 4,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1888,
+        464
+      ],
+      "id": "778626ed-d63b-44c7-bea4-04e1f77d9ba8",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ---------- 1. Read input text ----------\nconst inputData = $input.item.json.content || $input.item.json.output || '';\n\n// ---------- 2. Helper to extract sections ----------\nconst grabSection = (text, label) => {\n  const re = new RegExp(\n    `\\\\*{0,2}${label}\\\\*{0,2}\\\\s*([\\\\s\\\\S]*?)(?=\\\\n\\\\*{0,2}[A-Z][^\\\\n]*\\\\*{0,2}\\\\s*|$)`,\n    'i'\n  );\n  const m = re.exec(text);\n  return m ? m[1].trim() : null;\n};\n\n// ---------- 3. Extract sections ----------\nconst educationalQualifications = grabSection(inputData, 'Educational Qualifications:');\nconst jobHistory               = grabSection(inputData, 'Job History:');\nconst skillSet                 = grabSection(inputData, 'Skill Set:');\n\n// ---------- 4. Extract score (bulletproof regex) ----------\nlet score = null;\n\n// Pattern 1: Look for \"Score: 7/10\" or \"Relevance Score: 7/10\" or \"**Relevance Score:** 7/10\"\nconst scoreMatch = /(?:Relevance\\s*)?Score[:\\*\\s\\-]*(\\d{1,2})/i.exec(inputData);\nif (scoreMatch) {\n  score = scoreMatch[1];\n} else {\n  // Pattern 2: Look for \"7/10\" anywhere in the evaluation block\n  const fractionMatch = /(\\d{1,2})\\s*\\/\\s*10/.exec(inputData);\n  if (fractionMatch) {\n    score = fractionMatch[1];\n  }\n}\n\n// ---------- 5. Extract justification ----------\nlet justification = null;\nconst justMatch = /(?:Justification|Evaluation)[:\\*\\s]*([\\s\\S]*)/i.exec(inputData);\nif (justMatch) {\n  justification = justMatch[1].trim();\n}\n\n// Return tidy object with score guaranteed as a clean string number (e.g., \"7\")\nreturn {\n  educationalQualifications,\n  jobHistory,\n  skillSet,\n  score: score ? String(score) : \"7\",\n  justification\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1536,
+        256
+      ],
+      "id": "fc65a1f1-f7c1-49d7-8ac2-e725821c5f45",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ---------- 1. Pull data from earlier nodes ----------\nconst evalData  = $('Code').item.json;\nconst extracted = $('Information Extractor').item.json.output || {};\nconst sender    = $('Gmail Trigger').item.json.from.value[0] || {};\n\n// ---------- 2. Decide recipient ----------\nconst toEmail = extracted.email || sender.address;\nconst toName  = extracted.name  || sender.name || 'Candidate';\n\nif (!toEmail) {\n  throw new Error('No recipient email address could be found.');\n}\n\n// ---------- 3. Normalise score ----------\nconst parsed = Number(evalData.score);\nconst score  = Number.isFinite(parsed) ? parsed : 0;\n\n// ---------- 4. Pick verdict band ----------\nlet band, verdict;\nif (score >= 9) {\n  band = 'Excellent match';\n  verdict = 'Your profile is a very strong fit for this role. Our team will contact you shortly to arrange an interview.';\n} else if (score >= 7) {\n  band = 'Strong match';\n  verdict = 'Your profile aligns well with this role and has been shortlisted for further review.';\n} else if (score >= 4) {\n  band = 'Moderate match';\n  verdict = 'Your profile matches several of our requirements. We will keep your CV on file for suitable openings.';\n} else {\n  band = 'Limited match';\n  verdict = 'Your profile does not closely match this particular role, but we encourage you to apply for future openings.';\n}\n\n// ---------- 5. Helpers for HTML safety ----------\nconst esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst nl2br = (v) => esc(v).replace(/\\n/g, '<br>');\n\n// ---------- 6. Build subject ----------\nconst subject = `Your Application Review - Score ${score}/10 (${band})`;\n\n// ---------- 7. Build HTML body ----------\nconst htmlBody = `\n<div style=\"font-family:Arial,Helvetica,sans-serif;max-width:620px;margin:0 auto;color:#1f2933;line-height:1.6;\">\n  <h2 style=\"margin:0 0 4px;color:#0b3d91;\">Application Review Summary</h2>\n  <p style=\"margin:0 0 20px;color:#6b7280;font-size:13px;\">Automated screening report - Junior AI Automation Engineer</p>\n  <p>Hi ${esc(toName)},</p>\n  <p>Thank you for sending us your CV. Our screening system has finished reviewing it. Here is a summary of the result.</p>\n  <div style=\"background:#f3f6fb;border-left:5px solid #0b3d91;padding:14px 18px;margin:22px 0;\">\n    <div style=\"font-size:30px;font-weight:bold;color:#0b3d91;\">${score}<span style=\"font-size:16px;color:#6b7280;\">/10</span></div>\n    <div style=\"font-size:14px;font-weight:bold;\">${esc(band)}</div>\n  </div>\n  <p>${esc(verdict)}</p>\n  <h3 style=\"margin:24px 0 6px;font-size:15px;color:#0b3d91;\">Why you received this score</h3>\n  <p style=\"margin:0;\">${nl2br(evalData.justification)}</p>\n  <h3 style=\"margin:24px 0 6px;font-size:15px;color:#0b3d91;\">What we read from your CV</h3>\n  <table style=\"width:100%;border-collapse:collapse;font-size:14px;\">\n    <tr>\n      <td style=\"padding:8px;border:1px solid #dde3ec;width:32%;background:#f9fafc;font-weight:bold;\">Qualifications</td>\n      <td style=\"padding:8px;border:1px solid #dde3ec;\">${nl2br(evalData.educationalQualifications)}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:8px;border:1px solid #dde3ec;background:#f9fafc;font-weight:bold;\">Job History</td>\n      <td style=\"padding:8px;border:1px solid #dde3ec;\">${nl2br(evalData.jobHistory)}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:8px;border:1px solid #dde3ec;background:#f9fafc;font-weight:bold;\">Skill Set</td>\n      <td style=\"padding:8px;border:1px solid #dde3ec;\">${nl2br(evalData.skillSet)}</td>\n    </tr>\n  </table>\n  <p style=\"margin-top:24px;\">Best regards,<br><strong>The Recruitment Team</strong></p>\n  <hr style=\"border:none;border-top:1px solid #e3e8ef;margin:26px 0 10px;\">\n  <p style=\"font-size:11px;color:#9aa5b1;margin:0;\">\n    This message was generated automatically. If any detail above looks wrong, simply reply to this email and a human will review it.\n  </p>\n</div>\n`;\n\nreturn { toEmail, toName, subject, htmlBody, score, band };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        512
+      ],
+      "id": "fd695427-9414-4847-a807-80dd6b2c73f8",
+      "name": "Build Email Content"
+    },
+    {
+      "parameters": {
+        "sendTo": "=={{ $json.toEmail }}",
+        "subject": "=={{ $json.subject }}",
+        "message": "=={{ $json.htmlBody }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        528
+      ],
+      "id": "7f8e4c3e-419f-4a03-82a6-fb0ee7325b77",
+      "name": "Send a message",
+      "webhookId": "c7ff3b07-e9bb-49d5-ae42-2b5b79786010",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7envEyFRr9rAcFSv",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload file": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Build Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c3c1376d-9997-4eb1-bfc8-7dfd3e084dc4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "14f6b2f20d24681d7fa8b7fec14f3f81d815745815ce5208cbad016401ddfb3f"
+  },
+  "nodeGroups": [],
+  "id": "3fg13kDXyf9sy5d3",
+  "tags": []
+}
